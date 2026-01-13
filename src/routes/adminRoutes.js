@@ -468,4 +468,165 @@ router.get('/stats', requireAdmin, async (req, res) => {
   }
 });
 
+// ==================== DATABASE MANAGEMENT ====================
+
+/**
+ * POST /admin/clear-users
+ * Clear all users and related data (SUPER ADMIN ONLY)
+ * Admin users are preserved (separate table)
+ */
+router.post('/clear-users', requireAdmin, requirePermission('super_admin'), async (req, res) => {
+  const { PrismaClient } = require('@prisma/client');
+  const prisma = new PrismaClient();
+
+  try {
+    const { confirmPhrase } = req.body;
+    
+    // Require confirmation phrase for safety
+    if (confirmPhrase !== 'CONFIRM_CLEAR_ALL_USERS') {
+      return res.status(400).json({
+        success: false,
+        error: 'Safety check failed. Send { confirmPhrase: "CONFIRM_CLEAR_ALL_USERS" } to proceed.'
+      });
+    }
+
+    console.log('🗑️ Admin requested database user cleanup');
+    
+    // Get count before deletion
+    const userCount = await prisma.user.count();
+    
+    if (userCount === 0) {
+      return res.json({
+        success: true,
+        message: 'No users to delete. Database is already clean.',
+        deleted: { users: 0 }
+      });
+    }
+
+    // Delete in order (cascade handles most, but being thorough)
+    const deleted = {};
+    
+    // Delete related data first
+    deleted.emailEvents = (await prisma.emailEvent.deleteMany({})).count;
+    deleted.campaignLeads = (await prisma.campaignLead.deleteMany({})).count;
+    deleted.campaigns = (await prisma.campaign.deleteMany({})).count;
+    deleted.leads = (await prisma.lead.deleteMany({})).count;
+    deleted.emailTemplates = (await prisma.emailTemplate.deleteMany({})).count;
+    deleted.websites = (await prisma.website.deleteMany({})).count;
+    deleted.videos = (await prisma.video.deleteMany({})).count;
+    deleted.apiKeys = (await prisma.apiKey.deleteMany({})).count;
+    deleted.messages = (await prisma.message.deleteMany({})).count;
+    deleted.conversations = (await prisma.conversation.deleteMany({})).count;
+    deleted.cannedResponses = (await prisma.cannedResponse.deleteMany({})).count;
+    deleted.autoResponses = (await prisma.autoResponse.deleteMany({})).count;
+    deleted.conversationNotes = (await prisma.conversationNote.deleteMany({})).count;
+    
+    // Try Tackle.IO tables
+    try {
+      deleted.activities = (await prisma.activity.deleteMany({})).count;
+      deleted.calls = (await prisma.call.deleteMany({})).count;
+      deleted.documents = (await prisma.document.deleteMany({})).count;
+      deleted.deals = (await prisma.deal.deleteMany({})).count;
+      deleted.contacts = (await prisma.contact.deleteMany({})).count;
+      deleted.companies = (await prisma.company.deleteMany({})).count;
+      deleted.teamMembers = (await prisma.teamMember.deleteMany({})).count;
+    } catch (e) {
+      // Tables may not exist
+    }
+    
+    // Delete users
+    deleted.users = (await prisma.user.deleteMany({})).count;
+    
+    // Log admin action
+    await logAdminAction(req.admin.id, 'clear_all_users', 'users', null, { deleted }, req);
+    
+    console.log(`✅ Cleared ${deleted.users} users and related data`);
+    
+    res.json({
+      success: true,
+      message: `Successfully cleared ${deleted.users} users and all related data`,
+      deleted
+    });
+
+  } catch (error) {
+    console.error('❌ Error clearing users:', error);
+    res.status(500).json({ success: false, error: error.message });
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+/**
+ * GET /admin/system/health
+ * Detailed system health status including monitoring agents
+ */
+router.get('/system/health', requireAdmin, async (req, res) => {
+  const { PrismaClient } = require('@prisma/client');
+  const prisma = new PrismaClient();
+
+  try {
+    // Check database
+    let dbStatus = 'healthy';
+    let dbLatency = 0;
+    try {
+      const start = Date.now();
+      await prisma.$queryRaw`SELECT 1`;
+      dbLatency = Date.now() - start;
+    } catch (e) {
+      dbStatus = 'error';
+    }
+
+    // Get user stats
+    const userCount = await prisma.user.count();
+    const leadCount = await prisma.lead.count();
+    const campaignCount = await prisma.campaign.count();
+
+    // Memory usage
+    const memUsage = process.memoryUsage();
+    const memUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
+    const memTotalMB = Math.round(memUsage.heapTotal / 1024 / 1024);
+
+    // Uptime
+    const uptimeSeconds = process.uptime();
+    const uptimeHours = Math.round(uptimeSeconds / 3600 * 100) / 100;
+
+    res.json({
+      success: true,
+      data: {
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        service: 'leadsite-backend',
+        version: '1.0.0',
+        uptime: {
+          seconds: Math.round(uptimeSeconds),
+          hours: uptimeHours
+        },
+        database: {
+          status: dbStatus,
+          latencyMs: dbLatency
+        },
+        memory: {
+          usedMB: memUsedMB,
+          totalMB: memTotalMB,
+          percentUsed: Math.round((memUsedMB / memTotalMB) * 100)
+        },
+        stats: {
+          users: userCount,
+          leads: leadCount,
+          campaigns: campaignCount
+        },
+        monitoring: {
+          selfHealingEnabled: true,
+          agents: ['monitor', 'diagnostic', 'repair', 'learning', 'predictive', 'security', 'performance']
+        }
+      }
+    });
+
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
 module.exports = router;

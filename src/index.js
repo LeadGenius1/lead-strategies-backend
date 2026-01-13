@@ -203,7 +203,8 @@ initializeRedis().then((redisConfig) => {
 });
 
 // Start server immediately (routes are already registered)
-app.listen(PORT, async () => {
+// Bind to 0.0.0.0 to accept connections from all network interfaces (required for Railway/Docker)
+app.listen(PORT, '0.0.0.0', async () => {
   console.log(`
 ╔═══════════════════════════════════════════════════╗
 ║                                                   ║

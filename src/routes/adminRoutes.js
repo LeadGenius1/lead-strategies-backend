@@ -49,7 +49,8 @@ router.post('/login', async (req, res) => {
     res.cookie('admin_token', result.accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'lax',
+      domain: process.env.NODE_ENV === 'production' ? '.aileadstrategies.com' : undefined,
       maxAge: 4 * 60 * 60 * 1000 // 4 hours
     });
 

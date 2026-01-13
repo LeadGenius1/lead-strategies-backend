@@ -91,6 +91,15 @@ router.post('/signup', async (req, res) => {
     // Generate token
     const token = generateToken(user.id, user.tier);
 
+    // Set HTTP-only cookie for security
+    res.cookie('auth_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      domain: process.env.NODE_ENV === 'production' ? '.aileadstrategies.com' : undefined,
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    });
+
     // Return response with token at top level for easier access
     res.status(201).json({
       success: true,
@@ -151,6 +160,15 @@ router.post('/login', async (req, res) => {
 
     // Generate token
     const token = generateToken(user.id, user.tier);
+
+    // Set HTTP-only cookie for security
+    res.cookie('auth_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      domain: process.env.NODE_ENV === 'production' ? '.aileadstrategies.com' : undefined,
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    });
 
     res.json({
       success: true,

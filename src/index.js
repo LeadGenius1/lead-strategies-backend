@@ -5,6 +5,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
 
 const authRoutes = require('./routes/auth');
@@ -46,6 +47,8 @@ app.use(helmet());
 // CORS configuration
 const allowedOrigins = process.env.CORS_ORIGINS?.split(',') || [
   'http://localhost:3000',
+  'https://aileadstrategies.com',
+  'https://www.aileadstrategies.com',
   'https://leadsite.ai',
   'https://www.leadsite.ai',
   'https://leadsite.io',
@@ -74,6 +77,9 @@ app.use(cors({
 
 // Webhooks need raw body (before JSON parsing)
 app.use('/api/v1/webhooks/stripe', express.raw({ type: 'application/json' }));
+
+// Cookie parser (before routes)
+app.use(cookieParser());
 
 // JSON body parser
 app.use(express.json({ limit: '10mb' }));
